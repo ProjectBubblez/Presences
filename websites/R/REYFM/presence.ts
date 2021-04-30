@@ -17,11 +17,9 @@ let totalListeners: number,
   channels: Channel[] = [];
 
 function newStats(): void {
-  const xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function (): void {
-    if (this.readyState == 4 && this.status == 200) {
-      const data = JSON.parse(this.responseText);
-
+  fetch("https://api.reyfm.de/v4?voting=true")
+    .then((response) => response.json())
+    .then((data) => {
       totalListeners = data.all_listeners;
       const channelList: Array<string> = data.sequence,
         channelArray: Channel[] = [];
@@ -46,11 +44,7 @@ function newStats(): void {
         channel.timeEnd = channelData.now.time.end;
       });
       channels = channelArray;
-    }
-  };
-  xhttp.open("GET", "https://api.reyfm.de/v4?voting=true", true);
-  xhttp.withCredentials = false;
-  xhttp.send();
+    });
 }
 
 function findChannel(): string {
@@ -59,6 +53,7 @@ function findChannel(): string {
       .children) {
       for (const channel of rows.children) {
         if (
+          !channel.className.includes("desktop") &&
           (channel.firstElementChild.children[2]
             .firstElementChild as HTMLImageElement).src.includes("stop.png")
         ) {
@@ -78,15 +73,28 @@ setInterval(() => {
 }, 10000);
 
 presence.on("UpdateData", async () => {
-  const presenceData: PresenceData = {
-      largeImageKey: "rey",
-      smallImageKey: "reading"
-    },
-    info = await presence.getSetting("sInfo"),
+  const info = await presence.getSetting("sInfo"),
     elapsed = await presence.getSetting("tElapsed"),
     format1 = await presence.getSetting("sFormat1"),
     format2 = await presence.getSetting("sFormat2"),
-    format3 = await presence.getSetting("sListeners");
+    format3 = await presence.getSetting("sListeners"),
+    buttons = await presence.getSetting("buttons"),
+    logo: number = await presence.getSetting("logo"),
+    logoArr = [
+      "reywhitebacksmall",
+      "reyblackbacksmall",
+      "reycolorbacksmall",
+      "reywhiteback",
+      "reyblackback",
+      "reycolorback",
+      "reywhite",
+      "reyblack",
+      "rey"
+    ],
+    presenceData: PresenceData = {
+      largeImageKey: logoArr[logo] || "reywhitebacksmall",
+      smallImageKey: "reading"
+    };
 
   let showFormat3 = false;
 
@@ -96,8 +104,20 @@ presence.on("UpdateData", async () => {
     } else if (document.location.hostname == "www.reyfm.de") {
       if (document.location.pathname.includes("/bots")) {
         presenceData.details = "Viewing bots";
+        presenceData.buttons = [
+          {
+            label: "View Bots",
+            url: "https://www.reyfm.de/bots"
+          }
+        ];
       } else if (document.location.pathname.includes("/discord-bot")) {
         presenceData.details = "Viewing the Discord bot";
+        presenceData.buttons = [
+          {
+            label: "View Bot",
+            url: "https://www.reyfm.de/discord-bot"
+          }
+        ];
       } else if (document.location.pathname.includes("/partner")) {
         presenceData.details = "Viewing partners";
       } else if (document.location.pathname.includes("/stream-urls")) {
@@ -148,6 +168,9 @@ presence.on("UpdateData", async () => {
           presenceData.startTimestamp = Date.parse(channel.timeStart);
           presenceData.endTimestamp = Date.parse(channel.timeEnd);
           showFormat3 = true;
+          presenceData.buttons = [
+            { label: "Listen along!", url: `https://reyfm.de/${channel.name}` }
+          ];
         } else {
           artist = document.querySelector(
             "#player > div.wrapper > div.current > span.artist"
@@ -206,6 +229,8 @@ presence.on("UpdateData", async () => {
 
     showFormat3 = true;
 
+    presenceData.buttons = [{ label: "Listen along!", url: document.URL }];
+
     if (!paused) {
       presenceData.startTimestamp = Date.parse(channel.timeStart);
       presenceData.endTimestamp = Date.parse(channel.timeEnd);
@@ -218,6 +243,8 @@ presence.on("UpdateData", async () => {
   showFormat3
     ? presence.showSetting("sListeners")
     : presence.hideSetting("sListeners");
+
+  if (!buttons) delete presenceData.buttons;
 
   if (presenceData.details == null) {
     presence.setTrayTitle();
